@@ -1,9 +1,11 @@
 use serde_json::Value;
 use serde_json::Map;
-use tg_flows::{listen_to_update, Telegram, Update, UpdateKind, update_handler};
+use url::Url;
+use tg_flows::{listen_to_update, Telegram, Update, UpdateKind, InputFile, update_handler};
 use flowsnet_platform_sdk::logger;
 use std::{thread, time};
 use rand::Rng;
+use regex::Regex;
 
 #[no_mangle]
 #[tokio::main(flavor = "current_thread")]
@@ -98,7 +100,13 @@ async fn handler(update: Update) {
             log::info!("Bot message {:#?}", bot_msg);
             if bot_msg.get("type").unwrap().as_str().unwrap().eq_ignore_ascii_case("answer") && bot_msg.get("content_type").unwrap().as_str().unwrap().eq_ignore_ascii_case("text") {
                 if !has_answered {
-                    _ = tele.edit_message_text(chat_id, placeholder.id, bot_msg.get("content").unwrap().as_str().unwrap());
+                    let content = bot_msg.get("content").unwrap().as_str().unwrap();
+                    let re = Regex::new(r"\!\[.*?\]\((https?:\/\/[^\)]+\.)\)").unwrap();
+                    for capture in re.captures_iter(&content) {
+                        _ = tele.send_photo(chat_id, InputFile::url(Url::parse(&capture[1]).unwrap()));
+                        break;
+                    }
+                    _ = tele.edit_message_text(chat_id, placeholder.id, content);
                     has_answered = true;
                 }
             }
