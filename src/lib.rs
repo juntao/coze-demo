@@ -2,6 +2,8 @@ use serde_json::Value;
 use serde_json::Map;
 use tg_flows::{listen_to_update, Telegram, Update, UpdateKind, update_handler};
 use flowsnet_platform_sdk::logger;
+use std::{thread, time};
+use rand::Rng;
 
 #[no_mangle]
 #[tokio::main(flavor = "current_thread")]
@@ -13,6 +15,7 @@ pub async fn on_deploy() {
 #[update_handler]
 async fn handler(update: Update) {
     logger::init();
+    let mut rng = rand::thread_rng();
 
     let telegram_token = std::env::var("telegram_token").unwrap();
     let placeholder_text = std::env::var("placeholder").unwrap_or("Typing ...".to_string());
@@ -71,6 +74,9 @@ async fn handler(update: Update) {
             let bot_status: Value = serde_json::from_str(&body).expect("Error deserializing JSON");
             if bot_status.get("data").unwrap().get("status").unwrap().as_str().unwrap().eq_ignore_ascii_case("completed") {
                 break;
+            } else {
+                let duration = time::Duration::from_secs(3);
+                thread::sleep(duration);
             }
         }
 
@@ -95,6 +101,11 @@ async fn handler(update: Update) {
                     _ = tele.edit_message_text(chat_id, placeholder.id, bot_msg.get("content").unwrap().as_str().unwrap());
                     has_answered = true;
                 }
+            }
+
+            let num: u32 = rng.gen_range(0..=2);
+            if num == 0 {
+                has_followed_up = true;
             }
             if bot_msg.get("type").unwrap().as_str().unwrap().eq_ignore_ascii_case("follow_up") && bot_msg.get("content_type").unwrap().as_str().unwrap().eq_ignore_ascii_case("text") {
                 if !has_followed_up {
