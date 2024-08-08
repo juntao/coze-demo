@@ -2,7 +2,6 @@ use serde_json::Value;
 use serde_json::Map;
 use tg_flows::{listen_to_update, Telegram, Update, UpdateKind, update_handler};
 use flowsnet_platform_sdk::logger;
-use std::collections::HashMap;
 
 #[no_mangle]
 #[tokio::main(flavor = "current_thread")]
@@ -54,11 +53,54 @@ async fn handler(update: Update) {
         let body = res.text().await.unwrap();
         log::info!("Coze resp: {}", &body);
 
-        let bot_msgs: Vec<HashMap<String, String>> = serde_json::from_str(&body).expect("Error deserializing JSON");
-        for bot_msg in &bot_msgs {
+        let bot_status: Value = serde_json::from_str(&body).expect("Error deserializing JSON");
+        let coze_chat_id = bot_status.get("data").unwrap().get("id").unwrap().as_str().unwrap().to_string();
+        let coze_conversation_id = bot_status.get("data").unwrap().get("conversation_id").unwrap().as_str().unwrap().to_string();
+
+        while true {
+            let url = format!("https://api.coze.cn/v3/chat/retrieve?chat_id={}&conversation_id={}", coze_chat_id, coze_conversation_id);
+            let res = client
+                .get(&url)
+                .header("Authorization", &format!("Bearer {}", coze_access_token))
+                .header("Content-Type", "application/json")
+                .send()
+                .await.unwrap();
+            let body = res.text().await.unwrap();
+            log::info!("Coze resp: {}", &body);
+
+            let bot_status: Value = serde_json::from_str(&body).expect("Error deserializing JSON");
+            if bot_status.get("data").unwrap().get("status").unwrap().as_str().unwrap().eq_ignore_ascii_case("completed") {
+                break;
+            }
+        }
+
+        let url = format!("https://api.coze.cn/v3/chat/message/list?chat_id={}&conversation_id={}", coze_chat_id, coze_conversation_id);
+        let res = client
+            .get(&url)
+            .header("Authorization", &format!("Bearer {}", coze_access_token))
+            .header("Content-Type", "application/json")
+            .send()
+            .await.unwrap();
+        let body = res.text().await.unwrap();
+        log::info!("Coze resp: {}", &body);
+
+        let bot_resp: Value = serde_json::from_str(&body).expect("Error deserializing JSON");
+        let bot_msgs = bot_resp.get("data").unwrap().as_array().unwrap();
+        let mut has_answered = false;
+        let mut has_followed_up = false;
+        for bot_msg in bot_msgs {
             log::info!("Bot message {:#?}", bot_msg);
-            if bot_msg.get("type").unwrap().eq_ignore_ascii_case("text") {
-                _ = tele.edit_message_text(chat_id, placeholder.id, bot_msg.get("text").unwrap());
+            if bot_msg.get("type").unwrap().as_str().unwrap().eq_ignore_ascii_case("answer") && bot_msg.get("content_type").unwrap().as_str().unwrap().eq_ignore_ascii_case("text") {
+                if !has_answered {
+                    _ = tele.edit_message_text(chat_id, placeholder.id, bot_msg.get("content").unwrap().as_str().unwrap());
+                    has_answered = true;
+                }
+            }
+            if bot_msg.get("type").unwrap().as_str().unwrap().eq_ignore_ascii_case("follow_up") && bot_msg.get("content_type").unwrap().as_str().unwrap().eq_ignore_ascii_case("text") {
+                if !has_followed_up {
+                    _ = tele.send_message(chat_id, bot_msg.get("content").unwrap().as_str().unwrap());
+                    has_followed_up = true;
+                }
             }
         }
 
