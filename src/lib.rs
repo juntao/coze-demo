@@ -52,6 +52,7 @@ async fn handler(update: Update) {
             .send()
             .await.unwrap();
         let body = res.text().await.unwrap();
+        log::info!("Coze resp: {}", &body);
 
         let bot_msgs: Vec<HashMap<String, String>> = serde_json::from_str(&body).expect("Error deserializing JSON");
         for bot_msg in &bot_msgs {
