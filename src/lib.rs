@@ -101,13 +101,16 @@ async fn handler(update: Update) {
             if bot_msg.get("type").unwrap().as_str().unwrap().eq_ignore_ascii_case("answer") && bot_msg.get("content_type").unwrap().as_str().unwrap().eq_ignore_ascii_case("text") {
                 if !has_answered {
                     let content = bot_msg.get("content").unwrap().as_str().unwrap();
-                    let re = Regex::new(r"\!\[.*?\]\((https?:\/\/[^\)]+\.)\)").unwrap();
+                    let mut has_photo = false;
+                    let re = Regex::new(r"\!\[.*?\]\((https?:\/\/[^\)]+)\)").unwrap();
                     for capture in re.captures_iter(&content) {
                         _ = tele.send_photo(chat_id, InputFile::url(Url::parse(&capture[1]).unwrap()));
-                        break;
+                        has_photo = true;
                     }
-                    _ = tele.edit_message_text(chat_id, placeholder.id, content);
-                    has_answered = true;
+                    if !has_photo {
+                        _ = tele.edit_message_text(chat_id, placeholder.id, content);
+                        has_answered = true;
+                    }
                 }
             }
 
